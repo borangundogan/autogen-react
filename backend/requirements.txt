@@ -1,0 +1,14 @@
+fastapi==0.104.0
+uvicorn==0.23.2
+pydantic==2.4.2
+python-dotenv==1.0.0
+pyautogen==0.2.3
+openai==1.5.0
+google-api-python-client==2.103.0
+pytest==7.4.2
+httpx==0.25.0  # For TestClient in FastAPI tests
+python-multipart==0.0.6  # For form data parsing in FastAPI
+typing-extensions==4.8.0
+colorama==0.4.6  # For colored terminal output
+requests==2.31.0
+jsonschema==4.19.1 
