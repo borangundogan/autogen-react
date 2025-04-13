@@ -35,6 +35,18 @@ export const travelApi = {
   
   // Get all travel plans for a user (if auth is implemented)
   getUserPlans: () => api.get('/travel-plans/user'),
+
+  // Add this new method to the travelApi object
+  getItineraryStatus: async (itineraryId) => {
+    try {
+      // Endpoint to check status of agent progress
+      const response = await axios.get(`${API_BASE_URL}/itinerary/${itineraryId}/status`);
+      return response;
+    } catch (error) {
+      console.error('Error retrieving itinerary status:', error);
+      throw error;
+    }
+  },
 };
 
 // Authentication endpoints (if implemented)

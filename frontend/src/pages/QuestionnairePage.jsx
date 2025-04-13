@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import { travelApi } from '../services/api';
+import { Box, Text } from '@chakra-ui/react';
 
 const QuestionnaireContainer = styled.div`
   max-width: 800px;
@@ -305,21 +306,18 @@ function QuestionnairePage() {
         
         console.log('Submitting to backend:', backendData);
         
-        // Call backend API
-        const response = await travelApi.submitPreferences(backendData);
-        console.log('API Response:', response);
+        // Check if there is a feature flag for real-time loading
+        const useRealTimeLoading = localStorage.getItem('useRealTimeLoading') === 'true';
         
-        // Navigate to the generated itinerary
-        if (response.data && response.data.id) {
-          navigate(`/itinerary/${response.data.id}`);
+        // Navigate to appropriate loading page with form data
+        if (useRealTimeLoading) {
+          navigate('/loading-realtime', { state: { formData: backendData } });
         } else {
-          // If no ID is returned, use a temporary one based on timestamp
-          navigate(`/itinerary/temp-${Date.now()}`);
+          navigate('/loading', { state: { formData: backendData } });
         }
       } catch (error) {
-        console.error('Error submitting form:', error);
+        console.error('Error preparing form data:', error);
         alert('There was an error creating your itinerary. Please try again.');
-      } finally {
         setIsSubmitting(false);
       }
     }
@@ -390,6 +388,13 @@ function QuestionnairePage() {
     }
   };
   
+  // Toggle real-time loading (for development/testing)
+  const toggleRealTimeLoading = () => {
+    const currentSetting = localStorage.getItem('useRealTimeLoading') === 'true';
+    localStorage.setItem('useRealTimeLoading', (!currentSetting).toString());
+    alert(`Real-time agent loading is now ${!currentSetting ? 'enabled' : 'disabled'}`);
+  };
+
   return (
     <QuestionnaireContainer>
       <Header>
@@ -423,6 +428,15 @@ function QuestionnairePage() {
               : 'Next'}
         </NextButton>
       </ButtonContainer>
+      
+      {/* Dev toggle for real-time loading - Remove in production */}
+      <Box mt={8} textAlign="center">
+        <Text fontSize="xs" color="gray.500" cursor="pointer" onClick={toggleRealTimeLoading}>
+          {localStorage.getItem('useRealTimeLoading') === 'true' 
+            ? '✅ Using real-time agent tracking' 
+            : '⚙️ Using simulated agent tracking'}
+        </Text>
+      </Box>
     </QuestionnaireContainer>
   );
 }

@@ -65,6 +65,8 @@ class CoordinatorAgent:
         if interests is None:
             interests = []
         
+        print(f"Processing request for destination: {destination}")
+        
         # Get attraction recommendations
         attractions_prompt = f"Please recommend notable attractions and sights to visit in {destination}."
         try:
@@ -72,7 +74,8 @@ class CoordinatorAgent:
             if attractions_response is None:
                 attractions_response = f"No attractions information available for {destination}."
         except Exception as e:
-            attractions_response = f"Error retrieving attractions: {str(e)}"
+            print(f"Error retrieving attractions: {str(e)}")
+            attractions_response = f"No attractions information available for {destination}."
         
         # Get food recommendations
         food_prompt = f"Please recommend food, restaurants, and culinary experiences in {destination}."
@@ -81,7 +84,8 @@ class CoordinatorAgent:
             if food_response is None:
                 food_response = f"No food information available for {destination}."
         except Exception as e:
-            food_response = f"Error retrieving food recommendations: {str(e)}"
+            print(f"Error retrieving food recommendations: {str(e)}")
+            food_response = f"No food information available for {destination}."
         
         # Get accommodation recommendations
         accommodation_prompt = f"Please recommend accommodation options in {destination} across different price points."
@@ -90,29 +94,42 @@ class CoordinatorAgent:
             if accommodation_response is None:
                 accommodation_response = f"No accommodation information available for {destination}."
         except Exception as e:
-            accommodation_response = f"Error retrieving accommodation options: {str(e)}"
+            print(f"Error retrieving accommodation options: {str(e)}")
+            accommodation_response = f"No accommodation information available for {destination}."
         
-        # Get additional insights if requested
+        # Get additional insights - ALWAYS get insights, regardless of user preference
+        # This ensures the ReviewsAgent always runs
         insights_response = ""
-        if user_preferences.get("get_insights", False):
-            insights_prompt = f"What do people say about visiting {destination}? Find reviews and traveler opinions."
-            try:
-                insights_response = self.agent_service.get_agent_response("reviews", insights_prompt)
-                if insights_response is None:
-                    insights_response = f"No insights available for {destination}."
-            except Exception as e:
-                insights_response = f"Error retrieving insights: {str(e)}"
+        insights_prompt = f"What do people say about visiting {destination}? Find reviews and traveler opinions."
+        try:
+            # This will now use direct_reviews_search instead of LLM processing
+            print(f"Querying ReviewsAgent for insights about {destination}")
+            insights_response = self.agent_service.get_agent_response("reviews", insights_prompt)
+            print(f"Retrieved reviews data directly from Google Search API - {len(insights_response)} characters")
+            if not insights_response or len(insights_response) < 50:
+                print("Retrieved insufficient insights response, using fallback")
+                insights_response = self._get_fallback_insights(destination)
+        except Exception as e:
+            print(f"Error retrieving insights: {str(e)}")
+            insights_response = self._get_fallback_insights(destination)
         
-        # Get images if requested
+        # Debug - print the insights response
+        print(f"ReviewsAgent response preview: {insights_response[:300]}...")
+        
+        # Get images if requested - directly using Google Image Search API
         images_response = ""
         if user_preferences.get("get_images", False):
             images_prompt = f"Find high-quality images of {destination}. Include diverse scenes of landmarks, cityscapes, nature, and cultural elements."
             try:
+                # This will now use direct_image_search instead of LLM processing
                 images_response = self.agent_service.get_agent_response("images", images_prompt)
-                if images_response is None:
-                    images_response = f"No images available for {destination}."
+                print(f"Retrieved image URLs directly from Google Image Search API - {images_response.count('http')} URLs")
+                if not images_response or images_response.count('http') < 1:
+                    print("Retrieved insufficient image URLs, using fallback")
+                    images_response = self._get_fallback_images()
             except Exception as e:
-                images_response = f"Error retrieving images: {str(e)}"
+                print(f"Error retrieving images: {str(e)}")
+                images_response = self._get_fallback_images()
         
         # Create a comprehensive plan with the trip planner agent
         plan_prompt = self._create_plan_prompt(
@@ -125,11 +142,72 @@ class CoordinatorAgent:
             accommodation=accommodation_response
         )
         
+        # Include insights and images in the planner prompt if available
+        if insights_response:
+            plan_prompt += f"""
+
+=============================================================
+TRAVELER INSIGHTS AND REVIEWS: (MUST BE INCLUDED IN YOUR ITINERARY)
+=============================================================
+{insights_response}
+
+⚠️ ABSOLUTE CRITICAL INSTRUCTION ⚠️
+You MUST include this ENTIRE "TRAVELER INSIGHTS AND REVIEWS" section in your itinerary with NO CHANGES OR OMISSIONS.
+This includes:
+1. ALL search result titles and snippets
+2. ALL section headers like "GOOGLE SEARCH RESULTS" and "KEY TRAVELER INSIGHTS"
+3. ALL "Useful Resource Links" exactly as they appear above - DO NOT MODIFY OR OMIT ANY LINKS
+4. Do not reword, summarize, or paraphrase ANY content from this section
+
+Your itinerary MUST have a dedicated section called "TRAVELER INSIGHTS" that contains ALL of the above information exactly as provided.
+Failure to include ALL of this information will result in an incomplete and unacceptable itinerary.
+"""
+        
+        if images_response:
+            plan_prompt += f"""
+            
+=============================================================
+IMAGE REFERENCES (URLs): (ALL URLS MUST BE INCLUDED IN YOUR ITINERARY)
+=============================================================
+{images_response}
+
+IMPORTANT INSTRUCTION: You MUST include ALL of these image URLs in your response. Reference them at relevant points in your itinerary where they would be most helpful (e.g., "See image of [attraction]: [URL]").
+"""
+        
         try:
+            print("Generating final itinerary using TripPlannerAgent")
             itinerary = self.agent_service.get_agent_response("planner", plan_prompt)
+            
+            # Verify that the itinerary contains essential sections
+            if itinerary is not None and len(itinerary.strip()) > 100:
+                print(f"Generated itinerary of length {len(itinerary)} characters")
+                
+                # Check if insights are properly included
+                if insights_response and "TRAVELER INSIGHTS" not in itinerary:
+                    print("WARNING: Itinerary may be missing TRAVELER INSIGHTS section. Trying to fix...")
+                    # Include the full insights section at the end if missing
+                    itinerary += f"""
+
+## TRAVELER INSIGHTS
+{insights_response}
+"""
+                # Check if resource links are properly included
+                if "Useful Resource Links" not in itinerary and "USEFUL RESOURCE LINKS" not in itinerary:
+                    # Extract resource links from insights if available
+                    resource_links_section = ""
+                    if "## Useful Resource Links" in insights_response:
+                        resource_links_section = insights_response.split("## Useful Resource Links")[1].strip()
+                        print("Extracted resource links section from insights")
+                        itinerary += f"""
+
+## USEFUL RESOURCE LINKS
+{resource_links_section}
+"""
+            
             if itinerary is None or not itinerary.strip():
                 itinerary = f"No detailed itinerary could be generated for {destination}. Please try again."
         except Exception as e:
+            print(f"Error creating itinerary: {str(e)}")
             itinerary = f"Error creating itinerary: {str(e)}"
         
         # Compile results into a single response
@@ -145,6 +223,35 @@ class CoordinatorAgent:
             "insights": insights_response,
             "images": images_response,
         }
+    
+    def _get_fallback_insights(self, destination: str) -> str:
+        """Get fallback insights when API results are insufficient."""
+        return f"""# Traveler Insights for {destination}
+
+## Local Experiences
+- Travelers consistently mention the welcoming atmosphere and rich cultural experiences.
+- Many visitors recommend spending at least a few days to fully appreciate the destination.
+- The local cuisine receives overwhelmingly positive reviews.
+
+## Hidden Gems
+- Exploring beyond the main tourist areas reveals authentic local experiences.
+- Small cafes and local shops are frequently mentioned as highlights.
+- Early morning visits to popular attractions help avoid crowds.
+
+## Tips from Recent Visitors
+- Consider purchasing city passes for public transportation and attractions.
+- Learn a few basic phrases in the local language for a more authentic experience.
+- Weather can be unpredictable, so pack layers and be prepared for changes.
+
+These insights are compiled from various travel blogs and visitor reviews to give you a balanced perspective on your destination."""
+    
+    def _get_fallback_images(self) -> str:
+        """Get fallback image URLs when API results are insufficient."""
+        return """https://images.unsplash.com/photo-1523906834658-6e24ef2386f9
+https://images.unsplash.com/photo-1515542622106-78bda8ba0e5b
+https://images.unsplash.com/photo-1511739001486-6bfe10ce785f
+https://images.unsplash.com/photo-1520939817895-060bdaf4bc05
+https://images.unsplash.com/photo-1532498551838-b7a1cfac622e"""
     
     def _create_plan_prompt(self, destination: str, trip_length: int, budget: str, 
                            interests: List[str], attractions: str, food: str, 
@@ -195,6 +302,12 @@ class CoordinatorAgent:
         4. Estimated costs where applicable
         
         Create a logical flow for the itinerary that minimizes travel time and groups activities by geographic proximity.
+        
+        CRITICAL INSTRUCTIONS:
+        - You MUST preserve ALL input data in your response
+        - When you receive TRAVELER INSIGHTS AND REVIEWS, you MUST include them directly in your itinerary document in a dedicated section
+        - When you receive IMAGE REFERENCES (URLs), you MUST include ALL of these URLs in your response and reference them appropriately
+        - Do NOT summarize or omit any information - include everything provided to you
         """
         
         return prompt

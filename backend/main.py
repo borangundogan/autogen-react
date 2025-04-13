@@ -31,6 +31,9 @@ def health_check():
 # Import and include routers
 from routers import agents
 app.include_router(agents.router, prefix="/api/agents", tags=["Agents"])
+# Import and include the new itinerary router
+from routers import itinerary
+app.include_router(itinerary.router, prefix="/api/itinerary", tags=["Itinerary"])
 # Uncomment other routers as they are implemented
 # from routers import travel_plans, users
 # app.include_router(travel_plans.router, prefix="/api/travel-plans", tags=["Travel Plans"])

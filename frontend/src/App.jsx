@@ -4,6 +4,8 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 // Pages
 import HomePage from './pages/HomePage';
 import QuestionnairePage from './pages/QuestionnairePage';
+import LoadingPage from './pages/LoadingPage';
+import LoadingPageRealTime from './pages/LoadingPageRealTime';
 import ItineraryPage from './pages/ItineraryPage';
 import NotFoundPage from './pages/NotFoundPage';
 
@@ -20,6 +22,8 @@ function App() {
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/questionnaire" element={<QuestionnairePage />} />
+            <Route path="/loading" element={<LoadingPage />} />
+            <Route path="/loading-realtime" element={<LoadingPageRealTime />} />
             <Route path="/itinerary/:id" element={<ItineraryPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Routes>

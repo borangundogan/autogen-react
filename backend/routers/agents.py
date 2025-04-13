@@ -23,8 +23,8 @@ class TravelPreferences(BaseModel):
     trip_length: int
     budget: str = "moderate"
     interests: List[str] = []
-    get_insights: bool = False
-    get_images: bool = False
+    get_insights: bool = True
+    get_images: bool = True
 
 class AgentQuery(BaseModel):
     agent_type: str
@@ -83,12 +83,25 @@ async def create_travel_plan(preferences: TravelPreferences):
             "attractions": "No attractions information available.",
             "food": "No food recommendations available.",
             "accommodation": "No accommodation information available.",
+            "insights": "No insights available. Please try again later.",
+            "images": "No images available."
         }
         
-        # Ensure all required fields are in the response
+        # Only apply default values if the field is missing, None, or empty
         for field, default_value in required_fields.items():
-            if field not in response or response[field] is None:
+            if field not in response:
                 response[field] = default_value
+            elif response[field] is None:
+                response[field] = default_value
+            elif isinstance(response[field], str) and not response[field].strip():
+                response[field] = default_value
+            # Don't apply the default if there's valid content (even partial)
+                
+        # Log what we're actually returning
+        logger.info(f"Response insights length: {len(response.get('insights', ''))}")
+        logger.info(f"Response images length: {len(response.get('images', ''))}")
+        if response.get('images'):
+            logger.info(f"First 100 chars of images: {response.get('images', '')[:100]}")
         
         # Store the travel plan for later retrieval
         travel_plans[plan_id] = response
